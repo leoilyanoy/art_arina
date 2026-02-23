@@ -83,7 +83,7 @@ def main_menu_keyboard():
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("🗺 Эпоха", callback_data="mode_explore"), ```  **2. В SYSTEM_PROMPT** — найди: ``` 2. Топ-5 художников — каждое имя *жирным*, с 1-2 предложениями о стиле ``` Замени на: ``` 2. Топ-5 художников — каждое имя *жирным*, после имени в скобках годы жизни например (*Ван Гог* (1853–1890)), с 1-2 предложениями о стиле ```  **3. В SYSTEM_PROMPT** — найди: ``` - После 7 вопросов — итог с похвалой ``` Замени на: ``` - После 5 вопросов — итог с похвалой
-            InlineKeyboardButton("🎨 Художник", callback_data="mode_artist"),
+            InlineKeyboardButton("🎨 О мастере", callback_data="mode_artist"),
         ],
         [
             InlineKeyboardButton("🎓 Викторина", callback_data="mode_quiz"),
