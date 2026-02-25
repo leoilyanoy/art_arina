@@ -2,6 +2,9 @@ import os
 import logging
 import time
 import random
+import asyncio
+import httpx
+from io import BytesIO
 from collections import defaultdict
 from anthropic import Anthropic
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -989,22 +992,46 @@ async def check_painting_answer(answer: str, painting: dict) -> str:
     return "Сервер перегружен, попробуй ещё раз через несколько секунд 🔄"
 
 async def send_painting(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYPE):
-    painting = random.choice(PAINTINGS)
-    user_painting[user_id] = painting
-    try:
-        await context.bot.send_photo(
-            chat_id=chat_id,
-            photo=painting["url"],
-            caption="🖼 *Угадай картину!*\n\nКто написал эту картину? Как она называется?\nМожно ответить на любой из вопросов!",
-            parse_mode=ParseMode.MARKDOWN,
-        )
-    except Exception as e:
-        logger.error(f"Failed to send photo: {e}")
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="Не удалось загрузить картину. Попробуй нажать ещё раз.",
-            reply_markup=after_any_keyboard()
-        )
+    # Try up to 10 random paintings
+    tried = []
+    available = PAINTINGS.copy()
+    random.shuffle(available)
+    
+    for painting in available[:10]:
+        user_painting[user_id] = painting
+        url = painting["url"]
+        caption = "🖼 *Угадай картину!*\n\nКто написал эту картину? Как она называется?\nМожно ответить на любой из вопросов!"
+        
+        # Method 1: download bytes with httpx
+        try:
+            async with httpx.AsyncClient(timeout=20, follow_redirects=True) as http:
+                r = await http.get(url, headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+                    "Referer": "https://en.wikipedia.org/",
+                })
+                if r.status_code == 200 and len(r.content) > 5000:
+                    buf = BytesIO(r.content)
+                    buf.name = "painting.jpg"
+                    await context.bot.send_photo(chat_id=chat_id, photo=buf, caption=caption, parse_mode=ParseMode.MARKDOWN)
+                    return
+                else:
+                    logger.warning(f"Bad response {r.status_code} / {len(r.content)} bytes for {painting['title']}")
+        except Exception as e:
+            logger.warning(f"httpx failed for '{painting['title']}': {e}")
+        
+        # Method 2: pass URL directly to Telegram
+        try:
+            await context.bot.send_photo(chat_id=chat_id, photo=url, caption=caption, parse_mode=ParseMode.MARKDOWN)
+            return
+        except Exception as e:
+            logger.warning(f"Direct URL failed for '{painting['title']}': {e}")
+            continue
+
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text="Не удалось загрузить картину. Попробуй ещё раз 🔄",
+        reply_markup=after_any_keyboard()
+    )
 
 def detect_mode(text: str, current_mode: str) -> str:
     import re
